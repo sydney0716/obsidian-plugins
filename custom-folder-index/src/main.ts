@@ -230,25 +230,30 @@ export default class CustomFolderIndexPlugin extends Plugin {
 			)
 			.sort((a, b) => a.basename.localeCompare(b.basename));
 
-		const subfolders = folder.children
-			.filter((f): f is TFolder => f instanceof TFolder)
-			.sort((a, b) => a.name.localeCompare(b.name));
-
-		// Check if markers are already in the template
 		const templateHasFilesMarkers = this.settings.template.includes('<!-- start:files -->');
-		const templateHasSubfoldersMarkers = this.settings.template.includes('<!-- start:subfolders -->');
 
-		// Wrap content in markers only if template doesn't have them
+		const filesContentList = await Promise.all(files.map(async f => {
+			const link = `### [[${f.basename}]]`;
+			try {
+				const content = await this.app.vault.cachedRead(f);
+				// Match ## 0. Abstract
+				const match = content.match(/^## 0\. Abstract\s*\n([\s\S]*?)(?=\n## |$)/m);
+
+				if (match && match[1] && match[1].trim()) {
+					return `${link}\n ${match[1].trim()}`;
+				}
+			} catch (error) {
+				console.error(`Failed to read file ${f.path}:`, error);
+			}
+			return link;
+		}));
+
 		const filesContent = templateHasFilesMarkers
-			? files.map(f => `### [[${f.basename}]]`).join("\n")
-			: `<!-- start:files -->\n` + files.map(f => `### [[${f.basename}]]`).join("\n") + `\n<!-- end:files -->`;
+			? filesContentList.join("\n")
+			: `<!-- start:files -->\n` + filesContentList.join("\n") + `\n<!-- end:files -->`;
 
-		const subfoldersContent = templateHasSubfoldersMarkers
-			? subfolders.map(f => `### [[${f.name}]]`).join("\n")
-			: `<!-- start:subfolders -->\n` + subfolders.map(f => `### [[${f.name}]]`).join("\n") + `\n<!-- end:subfolders -->`;
 
-		// If there are no files, check if we should index subdirectories only
-		if (files.length === 0 && !this.settings.indexSubdirOnly) {
+		if (files.length === 0) {
 			return;
 		}
 
@@ -260,7 +265,7 @@ export default class CustomFolderIndexPlugin extends Plugin {
 				let newContent = currentContent;
 				let hasChanges = false;
 
-				// Helper to replace content between markers
+
 				const replaceBetweenMarkers = (content: string, startMarker: string, endMarker: string, newText: string): string => {
 					const startIndex = content.indexOf(startMarker);
 					const endIndex = content.indexOf(endMarker);
@@ -276,7 +281,6 @@ export default class CustomFolderIndexPlugin extends Plugin {
 					}
 				};
 
-				// Check if markers exist for files
 				if (currentContent.includes('<!-- start:files -->') && currentContent.includes('<!-- end:files -->')) {
 					const updatedContent = replaceBetweenMarkers(newContent, '<!-- start:files -->', '<!-- end:files -->', filesContent);
 					if (updatedContent !== newContent) {
@@ -284,32 +288,12 @@ export default class CustomFolderIndexPlugin extends Plugin {
 						hasChanges = true;
 					}
 				} else {
-					// Fallback: If no markers, likely an old file or manually created. 
-					// We could try to replace the template variable if it's there, but practically, 
-					// strict marker replacement is safer to avoid overwriting user content accidentally.
-					// However, if we don't overwrite, the markers will never get added.
-					// DECISION: If markers are missing, we check if the file matches the TEMPLATE structure approximately? 
-					// EASIER: If markers are missing, we treat it as a "Full update" (overwrite) to inject markers,
-					// BUT only if it looks like an auto-generated file (e.g. strict match of previous content logic).
-					// OR simply overwrite it this one time to upgrade it. 
-					// Let's stick to the generated content logic for full rewrite if markers are missing.
-					// This means the FIRST update will be destructive (resetting to template), which is acceptable for "adopting" the new format.
 					const fullGeneratedContent = this.settings.template
 						.replace('{folderName}', folderName)
-						.replace('{files}', filesContent)
-						.replace('{subfolders}', subfoldersContent);
+						.replace('{files}', filesContent);
 
 					if (currentContent !== fullGeneratedContent) {
 						newContent = fullGeneratedContent;
-						hasChanges = true;
-					}
-				}
-
-				// Check if markers exist for subfolders (independently)
-				if (currentContent.includes('<!-- start:subfolders -->') && currentContent.includes('<!-- end:subfolders -->')) {
-					const updatedContent = replaceBetweenMarkers(newContent, '<!-- start:subfolders -->', '<!-- end:subfolders -->', subfoldersContent);
-					if (updatedContent !== newContent) {
-						newContent = updatedContent;
 						hasChanges = true;
 					}
 				}
@@ -318,11 +302,9 @@ export default class CustomFolderIndexPlugin extends Plugin {
 					await this.app.vault.modify(existing, newContent);
 				}
 			} else {
-				// New file: Use template and inject markers
 				const content = this.settings.template
 					.replace('{folderName}', folderName)
-					.replace('{files}', filesContent)
-					.replace('{subfolders}', subfoldersContent);
+					.replace('{files}', filesContent);
 
 				await this.app.vault.create(indexFilePath, content);
 			}
