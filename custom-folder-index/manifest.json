@@ -1,7 +1,7 @@
 {
 	"id": "custom-folder-index",
 	"name": "Custom Folder Index",
-	"version": "0.1.6",
+	"version": "0.1.7",
 	"minAppVersion": "1.5.0",
 	"description": "Folder index generator with custom.",
 	"author": "sydney0716",

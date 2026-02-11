@@ -234,33 +234,94 @@ export default class CustomFolderIndexPlugin extends Plugin {
 			.filter((f): f is TFolder => f instanceof TFolder)
 			.sort((a, b) => a.name.localeCompare(b.name));
 
-		const fileLinks = files
-			.map(f => `### [[${f.basename}]]`)
-			.join("\n");
+		// Wrap content in markers
+		const filesContent =
+			`<!-- start:files -->\n` +
+			files.map(f => `### [[${f.basename}]]`).join("\n") +
+			`\n<!-- end:files -->`;
 
-		const folderLinks = subfolders
-			.map(f => `### [[${f.name}]]`)
-			.join("\n");
+		const subfoldersContent =
+			`<!-- start:subfolders -->\n` +
+			subfolders.map(f => `### [[${f.name}]]`).join("\n") +
+			`\n<!-- end:subfolders -->`;
 
 		// If there are no files, check if we should index subdirectories only
 		if (files.length === 0 && !this.settings.indexSubdirOnly) {
 			return;
 		}
 
-		const content = this.settings.template
-			.replace('{folderName}', folderName)
-			.replace('{files}', fileLinks)
-			.replace('{subfolders}', folderLinks);
-
 		let existing = this.app.vault.getAbstractFileByPath(indexFilePath);
 
 		try {
 			if (existing instanceof TFile) {
-				if (existing.name === indexFileName && (await this.app.vault.read(existing)) === content) {
-					return; // No changes
+				let currentContent = await this.app.vault.read(existing);
+				let newContent = currentContent;
+				let hasChanges = false;
+
+				// Helper to replace content between markers
+				const replaceBetweenMarkers = (content: string, startMarker: string, endMarker: string, newText: string): string => {
+					const startIndex = content.indexOf(startMarker);
+					const endIndex = content.indexOf(endMarker);
+
+					if (startIndex !== -1 && endIndex !== -1 && endIndex > startIndex) {
+						// Markers found, replace content between them
+						const before = content.substring(0, startIndex);
+						const after = content.substring(endIndex + endMarker.length);
+						return before + newText + after;
+					} else {
+						// Markers not found, return original content
+						return content;
+					}
+				};
+
+				// Check if markers exist for files
+				if (currentContent.includes('<!-- start:files -->') && currentContent.includes('<!-- end:files -->')) {
+					const updatedContent = replaceBetweenMarkers(newContent, '<!-- start:files -->', '<!-- end:files -->', filesContent);
+					if (updatedContent !== newContent) {
+						newContent = updatedContent;
+						hasChanges = true;
+					}
+				} else {
+					// Fallback: If no markers, likely an old file or manually created. 
+					// We could try to replace the template variable if it's there, but practically, 
+					// strict marker replacement is safer to avoid overwriting user content accidentally.
+					// However, if we don't overwrite, the markers will never get added.
+					// DECISION: If markers are missing, we check if the file matches the TEMPLATE structure approximately? 
+					// EASIER: If markers are missing, we treat it as a "Full update" (overwrite) to inject markers,
+					// BUT only if it looks like an auto-generated file (e.g. strict match of previous content logic).
+					// OR simply overwrite it this one time to upgrade it. 
+					// Let's stick to the generated content logic for full rewrite if markers are missing.
+					// This means the FIRST update will be destructive (resetting to template), which is acceptable for "adopting" the new format.
+					const fullGeneratedContent = this.settings.template
+						.replace('{folderName}', folderName)
+						.replace('{files}', filesContent)
+						.replace('{subfolders}', subfoldersContent);
+
+					if (currentContent !== fullGeneratedContent) {
+						newContent = fullGeneratedContent;
+						hasChanges = true;
+					}
 				}
-				await this.app.vault.modify(existing, content);
+
+				// Check if markers exist for subfolders (independently)
+				if (currentContent.includes('<!-- start:subfolders -->') && currentContent.includes('<!-- end:subfolders -->')) {
+					const updatedContent = replaceBetweenMarkers(newContent, '<!-- start:subfolders -->', '<!-- end:subfolders -->', subfoldersContent);
+					if (updatedContent !== newContent) {
+						newContent = updatedContent;
+						hasChanges = true;
+					}
+				}
+
+				if (hasChanges) {
+					await this.app.vault.modify(existing, newContent);
+				}
 			} else {
+				// New file: Use template and inject markers
+				const content = this.settings.template
+					.replace('{folderName}', folderName)
+					.replace('{files}', filesContent)
+					.replace('{subfolders}', subfoldersContent);
+
 				await this.app.vault.create(indexFilePath, content);
 			}
 		} catch (e: any) {
