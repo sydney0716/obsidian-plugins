@@ -252,7 +252,6 @@ export default class CustomFolderIndexPlugin extends Plugin {
 			? filesContentList.join("\n")
 			: `<!-- start:files -->\n` + filesContentList.join("\n") + `\n<!-- end:files -->`;
 
-
 		if (files.length === 0) {
 			return;
 		}
@@ -264,7 +263,6 @@ export default class CustomFolderIndexPlugin extends Plugin {
 				let currentContent = await this.app.vault.read(existing);
 				let newContent = currentContent;
 				let hasChanges = false;
-
 
 				const replaceBetweenMarkers = (content: string, startMarker: string, endMarker: string, newText: string): string => {
 					const startIndex = content.indexOf(startMarker);
