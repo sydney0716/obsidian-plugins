@@ -234,16 +234,18 @@ export default class CustomFolderIndexPlugin extends Plugin {
 			.filter((f): f is TFolder => f instanceof TFolder)
 			.sort((a, b) => a.name.localeCompare(b.name));
 
-		// Wrap content in markers
-		const filesContent =
-			`<!-- start:files -->\n` +
-			files.map(f => `### [[${f.basename}]]`).join("\n") +
-			`\n<!-- end:files -->`;
+		// Check if markers are already in the template
+		const templateHasFilesMarkers = this.settings.template.includes('<!-- start:files -->');
+		const templateHasSubfoldersMarkers = this.settings.template.includes('<!-- start:subfolders -->');
 
-		const subfoldersContent =
-			`<!-- start:subfolders -->\n` +
-			subfolders.map(f => `### [[${f.name}]]`).join("\n") +
-			`\n<!-- end:subfolders -->`;
+		// Wrap content in markers only if template doesn't have them
+		const filesContent = templateHasFilesMarkers
+			? files.map(f => `### [[${f.basename}]]`).join("\n")
+			: `<!-- start:files -->\n` + files.map(f => `### [[${f.basename}]]`).join("\n") + `\n<!-- end:files -->`;
+
+		const subfoldersContent = templateHasSubfoldersMarkers
+			? subfolders.map(f => `### [[${f.name}]]`).join("\n")
+			: `<!-- start:subfolders -->\n` + subfolders.map(f => `### [[${f.name}]]`).join("\n") + `\n<!-- end:subfolders -->`;
 
 		// If there are no files, check if we should index subdirectories only
 		if (files.length === 0 && !this.settings.indexSubdirOnly) {

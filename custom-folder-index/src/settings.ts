@@ -15,7 +15,14 @@ export const DEFAULT_SETTINGS: CustomFolderIndexSettings = {
 # {folderName}
 
 ## Files
+<!-- start:files -->
 {files}
+<!-- end:files -->
+
+## Subfolders
+<!-- start:subfolders -->
+{subfolders}
+<!-- end:subfolders -->
 `,
 	blacklist: '',
 	indexFileName: '0_{folderName}.md',
@@ -83,7 +90,7 @@ export class CustomFolderIndexSettingTab extends PluginSettingTab {
 
 		new Setting(containerEl)
 			.setName('Index Template')
-			.setDesc('Template for the index file content. Use {folderName} for the folder name and {files} for the list of files.')
+			.setDesc('Template for the index file content. Use {folderName}, {files}, and {subfolders}. Use <!-- start:files --> and <!-- end:files --> markers to enable partial updates (preserving your custom text elsewhere).')
 			.addTextArea(text => {
 				text
 					.setValue(this.plugin.settings.template)
@@ -91,7 +98,7 @@ export class CustomFolderIndexSettingTab extends PluginSettingTab {
 						this.plugin.settings.template = value;
 						await this.plugin.saveSettings();
 					});
-				text.inputEl.rows = 10;
+				text.inputEl.rows = 15;
 			});
 	}
 }
